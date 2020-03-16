@@ -545,7 +545,23 @@ function getFlows() {
             return [];
         }
         flowsFileExists = true;
-        return result;
+        var tabs = result.filter(item => item.type == "tab");
+        var promises = tabs.map(tab => when.promise(function(resolve) {
+            var flowFullPath;
+            if (flowsFullPath.endsWith(".json")) {
+                flowFullPath = fspath.dirname(flowsFullPath) + "/"
+                    + fspath.basename(flowsFullPath,".json") + "_"
+                    + tab.id + ".json";
+            } else {
+                flowFullPath = flowsFullPath + "_" + tab.id;
+            }
+            flowFileBackup = getBackupFilename(flowFullPath)
+            resolve(util.readFile(flowFullPath,flowFullPath,null,'flow'));
+        }));
+        var concatPromise = when.reduce(promises, function (result, flows) {
+	           return result.concat(flows);
+           }, result);
+        return concatPromise;
     });
 }
 
@@ -561,14 +577,42 @@ function saveFlows(flows) {
 
     flowsFileExists = true;
 
-    var flowData;
+    var tabs = flows.filter(item => item.type == "tab");
 
-    if (settings.flowFilePretty) {
-        flowData = JSON.stringify(flows,null,4);
-    } else {
-        flowData = JSON.stringify(flows);
-    }
-    return util.writeFile(flowsFullPath, flowData, flowsFileBackup);
+
+    promises = tabs.map(tab => when.promise(function(resolve) {
+        var flow = flows.filter(item => item.z == tab.id);
+        var flowData;
+
+        if (settings.flowFilePretty) {
+            flowData = JSON.stringify(flow,null,4);
+        } else {
+            flowData = JSON.stringify(flow);
+        }
+        var flowFullPath;
+        if (flowsFullPath.endsWith(".json")) {
+            flowFullPath = fspath.dirname(flowsFullPath) + "/"
+                + fspath.basename(flowsFullPath,".json") + "_"
+                + tab.id + ".json";
+        } else {
+            flowFullPath = flowsFullPath + "_" + tab.id;
+        }
+        flowFileBackup = getBackupFilename(flowFullPath)
+        resolve(util.writeFile(flowFullPath, flowData, flowFileBackup));
+    }));
+    return when.all(promises).then(function(){
+        var flow = flows.filter(item => item.z == "" || item.z === undefined);
+        var flowData;
+
+        if (settings.flowFilePretty) {
+            flowData = JSON.stringify(flow,null,4);
+        } else {
+            flowData = JSON.stringify(flow);
+        }
+
+        return util.writeFile(flowsFullPath, flowData, flowsFileBackup);
+    })
+
 }
 
 function getCredentials() {
